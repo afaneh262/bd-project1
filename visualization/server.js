@@ -1,19 +1,19 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const mongoose = require('mongoose');
-const path = require('path');
-require('dotenv').config();
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const mongoose = require("mongoose");
+const path = require("path");
+require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongodb:27017/crypto';
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://root:example@localhost:27017/crypto_dummy?authSource=admin";
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
 });
 
 // Define prediction schema
@@ -21,16 +21,16 @@ const predictionSchema = new mongoose.Schema({
   symbol: String,
   timestamp: Number,
   weighted_mid_price: Number,
-  prediction: Number
+  prediction: Number,
 });
 
-const Prediction = mongoose.model('Prediction', predictionSchema);
+const Prediction = mongoose.model("predictions", predictionSchema);
 
 // Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
 // REST API endpoints
-app.get('/api/predictions/:symbol', async (req, res) => {
+app.get("/api/predictions/:symbol", async (req, res) => {
   try {
     const { symbol } = req.params;
     const predictions = await Prediction.find({ symbol })
@@ -43,24 +43,24 @@ app.get('/api/predictions/:symbol', async (req, res) => {
 });
 
 // WebSocket connection handling
-io.on('connection', (socket) => {
-  console.log('Client connected');
+io.on("connection", (socket) => {
+  console.log("Client connected");
 
-  socket.on('subscribe', async (symbol) => {
+  socket.on("subscribe", async (symbol) => {
     // Set up change stream for real-time updates
     const changeStream = Prediction.watch([
-      { $match: { 'fullDocument.symbol': symbol } }
+      { $match: { "fullDocument.symbol": symbol } },
     ]);
 
-    changeStream.on('change', (change) => {
-      if (change.operationType === 'insert') {
-        socket.emit('prediction', change.fullDocument);
+    changeStream.on("change", (change) => {
+      if (change.operationType === "insert") {
+        socket.emit("prediction", change.fullDocument);
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on("disconnect", () => {
       changeStream.close();
-      console.log('Client disconnected');
+      console.log("Client disconnected");
     });
   });
 });

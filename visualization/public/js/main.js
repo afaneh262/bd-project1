@@ -46,6 +46,7 @@ function initCharts() {
     }
   );
 }
+
 function updateChartsWithNewPrediction(prediction) {
   const timestamp = new Date(prediction.timestamp);
 
@@ -123,6 +124,7 @@ function updateChartsWithHistoricalData(data) {
     priceData.x.push(timestamp);
     priceData.open.push(record.weighted_mid_price);
     priceData.close.push(record.prediction);
+    
     // Calculate high and low with some spread for visualization
     priceData.high.push(record.weighted_mid_price * 1.001);
     priceData.low.push(record.weighted_mid_price * 0.999);

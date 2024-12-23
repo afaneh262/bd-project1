@@ -5,7 +5,7 @@ require("dotenv").config();
 // Kafka configuration
 const kafka = new Kafka({
   clientId: "binance-collector",
-  brokers: [process.env.KAFKA_BOOTSTRAP_SERVERS || "kafka:29092"],
+  brokers: [process.env.KAFKA_BOOTSTRAP_SERVERS || "localhost:9092"],
 });
 
 const producer = kafka.producer();
@@ -20,11 +20,19 @@ async function setupKafkaTopics() {
   const admin = kafka.admin();
   await admin.connect();
 
-  const topics = SYMBOLS.map((symbol) => ({
+  const orderBookTopics = SYMBOLS.map((symbol) => ({
     topic: `orderbook_${symbol.toLowerCase()}`,
     numPartitions: 1,
     replicationFactor: 1,
   }));
+
+  const tradesTopics = SYMBOLS.map((symbol) => ({
+    topic: `trades_${symbol.toLowerCase()}`,
+    numPartitions: 1,
+    replicationFactor: 1,
+  }));
+
+  const topics = [...orderBookTopics, ...tradesTopics];
 
   await admin.createTopics({ topics });
   await admin.disconnect();
@@ -42,8 +50,8 @@ async function startDataCollection() {
         const message = {
           symbol,
           timestamp: Date.now(),
-          bids: depth.bids,
-          asks: depth.asks,
+          bids: depth.bidDepth,
+          asks: depth.askDepth,
         };
 
         try {
@@ -71,6 +79,9 @@ async function startDataCollection() {
           timestamp: trade.timestamp,
           price: trade.price,
           quantity: trade.quantity,
+          tradeTime: trade.tradeTime,
+          isBuyerMaker: trade.isBuyerMaker,
+          maker: trade.maker,
         };
 
         try {
