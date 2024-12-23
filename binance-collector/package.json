@@ -1,0 +1,11 @@
+{
+    "name": "binance-collector",
+    "version": "1.0.0",
+    "description": "Binance order book data collector",
+    "main": "collector.js",
+    "dependencies": {
+      "binance-api-node": "^0.12.6",
+      "kafkajs": "^2.2.4",
+      "dotenv": "^16.0.3"
+    }
+  }

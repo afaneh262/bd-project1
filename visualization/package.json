@@ -1,0 +1,12 @@
+{
+    "name": "crypto-visualization",
+    "version": "1.0.0",
+    "description": "Cryptocurrency prediction visualization service",
+    "main": "server.js",
+    "dependencies": {
+      "express": "^4.18.2",
+      "socket.io": "^4.6.1",
+      "mongoose": "^7.0.3",
+      "dotenv": "^16.0.3"
+    }
+  }
