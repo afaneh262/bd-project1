@@ -137,8 +137,8 @@ object Main {
     tradesDF
       .withWatermark("timestamp", WINDOW_DURATION)
       .groupBy(
-        window($"timestamp", WINDOW_DURATION),
-        $"symbol"
+        window(col("timestamp"), WINDOW_DURATION),
+        col("symbol")
       )
       .agg(
         avg("price").as("avg_price"),
@@ -148,13 +148,13 @@ object Main {
         (max("price") - min("price")).as("price_range")
       )
       .select(
-        $"symbol",
-        $"window.end".as("timestamp"),
-        $"avg_price",
-        $"volume",
-        $"trade_count",
-        $"price_volatility",
-        $"price_range"
+        "symbol",
+        "window.end".as("timestamp"),
+        "avg_price",
+        "volume",
+        "trade_count",
+        "price_volatility",
+        "price_range"
       )
   }
 
@@ -172,10 +172,22 @@ object Main {
       .fill(0) // Fill missing values with 0
   }
 
+  // Map of price analyzers for each symbol
+  private val priceAnalyzers =
+    new scala.collection.mutable.HashMap[String, PriceAnalyzer]()
+
   def trainAndPredict(
       features: org.apache.spark.sql.DataFrame,
       spark: SparkSession
   ): Unit = {
+    // Initialize price analyzers for each symbol if not exists
+    features.select("symbol").distinct().collect().foreach { row =>
+      val symbol = row.getString(0)
+      if (!priceAnalyzers.contains(symbol)) {
+        priceAnalyzers(symbol) = new PriceAnalyzer()
+      }
+    }
+
     // Prepare features for ML
     val featureCols = Array(
       "bid_ask_ratio",
