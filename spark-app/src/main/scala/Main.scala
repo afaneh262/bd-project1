@@ -1,17 +1,26 @@
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.types._
 
 object Main {
+  // Define schema for the JSON payload
+  val schema = StructType(
+    Seq(
+      StructField("symbol", StringType, false),
+      StructField("timestamp", TimestampType, false),
+      StructField("bids", ArrayType(ArrayType(StringType)), false),
+      StructField("asks", ArrayType(ArrayType(StringType)), false)
+    )
+  )
+
   def main(args: Array[String]): Unit = {
     spark.sparkContext.setLogLevel("ERROR")
 
     val spark = SparkSession
       .builder()
       .appName("Task-1")
-      // .master("spark://spark-master:7077")
       .master("local[*]")
       .config(
         "spark.mongodb.read.connection.uri",
@@ -22,6 +31,8 @@ object Main {
         "mongodb://root:example@localhost:27017"
       )
       .getOrCreate()
+
+    spark.sparkContext.setLogLevel("ERROR")
 
     import spark.implicits._
 
@@ -70,9 +81,9 @@ object Main {
       orderBookDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
     orderBookDF
-      .withColumn("bid_price", expr("bids[0][0]"))
-      .withColumn("ask_price", expr("asks[0][0]"))
-      .withColumn("bid_ask_spread", "ask_price" - "bid_price")
+      .withColumn("bid_price", expr("cast(bids[0][0] as double)"))
+      .withColumn("ask_price", expr("cast(asks[0][0] as double)"))
+      .withColumn("bid_ask_spread", col("ask_price") - col("bid_price"))
       .select(
         "symbol",
         "timestamp",
@@ -113,7 +124,9 @@ object Main {
       )
       .withColumn(
         "order_book_imbalance",
-        ("total_bid_volume" - "total_ask_volume") / ("total_bid_volume" + "total_ask_volume")
+        (col("total_bid_volume") - col("total_ask_volume")) / (col(
+          "total_bid_volume"
+        ) + col("total_ask_volume"))
       )
       .select("symbol", "timestamp", "order_book_imbalance")
       .withColumn("metric", lit("order_book_imbalance"))
@@ -125,10 +138,13 @@ object Main {
     val windowSpec =
       Window.partitionBy("symbol").orderBy("timestamp").rowsBetween(-5, 0)
     orderBookDF
-      .withColumn("bid_price", expr("bids[0][0]"))
-      .withColumn("ask_price", expr("asks[0][0]"))
-      .withColumn("bid_ask_spread", "ask_price" - "bid_price")
-      .withColumn("rolling_avg_spread", avg("bid_ask_spread").over(windowSpec))
+      .withColumn("bid_price", expr("cast(bids[0][0] as double)"))
+      .withColumn("ask_price", expr("cast(asks[0][0] as double)"))
+      .withColumn("bid_ask_spread", col("ask_price") - col("bid_price"))
+      .withColumn(
+        "rolling_avg_spread",
+        avg(col("bid_ask_spread")).over(windowSpec)
+      )
       .select("symbol", "timestamp", "rolling_avg_spread")
       .withColumn("metric", lit("market_trends"))
   }
