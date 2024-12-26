@@ -16,7 +16,6 @@ object Main {
   )
 
   def main(args: Array[String]): Unit = {
-    spark.sparkContext.setLogLevel("ERROR")
 
     val spark = SparkSession
       .builder()
@@ -34,8 +33,6 @@ object Main {
 
     spark.sparkContext.setLogLevel("ERROR")
 
-    import spark.implicits._
-
     // Kafka configuration
     val kafkaParams = Map(
       "kafka.bootstrap.servers" -> "kafka:29092",
@@ -51,7 +48,7 @@ object Main {
     // Parse Kafka JSON payload
     val parsedStream = kafkaStream
       .selectExpr("CAST(value AS STRING)")
-      .select(from_json("value", schema).as("data"))
+      .select(from_json(col("value"), schema).as("data"))
       .select("data.*")
 
     // Calculate metrics
@@ -72,6 +69,8 @@ object Main {
       .outputMode("append")
       .option("checkpointLocation", "/tmp/checkpoints")
       .trigger(Trigger.ProcessingTime("10 seconds"))
+      .option("database", "wholeInvertedIndex")
+      .option("collection", "words")
       .start()
 
     spark.streams.awaitAnyTermination()
@@ -155,19 +154,19 @@ object Main {
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
       .withWatermark("timestamp", "5 minutes")
-      .groupBy(window("timestamp", "1 minute"), "symbol")
+      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
       .agg(
         count("*").as("trade_count"),
         sum("quantity").as("total_trade_volume"),
         avg("quantity").as("avg_trade_size")
       )
       .select(
-        "symbol",
-        "window.start".as("start_time"),
-        "window.end".as("end_time"),
-        "trade_count",
-        "total_trade_volume",
-        "avg_trade_size"
+        col("symbol"),
+        col("window.start").as("start_time"),
+        col("window.end").as("end_time"),
+        col("trade_count"),
+        col("total_trade_volume"),
+        col("avg_trade_size")
       )
       .withColumn("metric", lit("trade_volume"))
   }
@@ -183,7 +182,8 @@ object Main {
       .withColumn("rolling_avg_price", avg("price").over(windowSpec))
       .withColumn(
         "price_momentum",
-        "price" - lag("price", 1).over(windowSpec)
+        col("price").cast("double") - lag(col("price").cast("double"), 1)
+          .over(windowSpec)
       )
       .select(
         "symbol",
@@ -200,17 +200,17 @@ object Main {
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
       .withWatermark("timestamp", "5 minutes")
-      .groupBy(window("timestamp", "1 minute"), "symbol")
+      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
       .agg(
         stddev("price").as("price_volatility"),
         (max("price") - min("price")).as("price_range")
       )
       .select(
-        "symbol",
-        "window.start".as("start_time"),
-        "window.end".as("end_time"),
-        "price_volatility",
-        "price_range"
+        col("symbol"),
+        col("window.start").as("start_time"),
+        col("window.end").as("end_time"),
+        col("price_volatility"),
+        col("price_range")
       )
       .withColumn("metric", lit("volatility_analysis"))
   }
@@ -221,17 +221,17 @@ object Main {
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
       .withWatermark("timestamp", "5 minutes")
-      .groupBy(window("timestamp", "1 minute"), "symbol")
+      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
       .agg(
-        sum("price" * "quantity").as("price_volume"),
+        sum(col("price") * col("quantity").cast("double")).as("price_volume"),
         sum("quantity").as("total_volume")
       )
-      .withColumn("vwap", "price_volume" / "total_volume")
+      .withColumn("vwap", expr("price_volume / total_volume"))
       .select(
-        "symbol",
-        "window.start".as("start_time"),
-        "window.end".as("end_time"),
-        "vwap"
+        col("symbol"),
+        col("window.start").alias("start_time"),
+        col("window.end").as("end_time"),
+        col("vwap")
       )
       .withColumn("metric", lit("vwap"))
   }
