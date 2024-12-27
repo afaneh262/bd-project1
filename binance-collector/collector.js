@@ -45,8 +45,9 @@ async function startDataCollection() {
     console.log("Connected to Kafka");
 
     // Set up depth websocket streams for each symbol
-    SYMBOLS.forEach((symbol) => {
+    /*     SYMBOLS.forEach((symbol) => {
       client.ws.depth(symbol, async (depth) => {
+        console.log('depth', depth);
         const message = {
           symbol,
           timestamp: Date.now(),
@@ -69,19 +70,20 @@ async function startDataCollection() {
       });
 
       console.log(`Started collecting order book data for ${symbol}`);
-    });
+    }); */
 
     // Also collect price data
+    //
     SYMBOLS.forEach((symbol) => {
       client.ws.trades(symbol, async (trade) => {
         const message = {
+          tradeTime: trade.tradeTime,
           symbol,
-          timestamp: trade.timestamp,
           price: trade.price,
           quantity: trade.quantity,
-          tradeTime: trade.tradeTime,
           isBuyerMaker: trade.isBuyerMaker,
           maker: trade.maker,
+          tradeId: trade.tradeId,
         };
 
         try {
@@ -93,6 +95,7 @@ async function startDataCollection() {
               },
             ],
           });
+          console.log(`Sent trade data to Kafka for ${symbol}, tradeId: ${trade.tradeId}`);
         } catch (error) {
           console.error(
             `Error sending trade data to Kafka for ${symbol}:`,

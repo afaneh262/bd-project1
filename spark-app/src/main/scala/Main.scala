@@ -15,6 +15,18 @@ object Main {
     )
   )
 
+  val tradeSchema = StructType(
+    Seq(
+      StructField("tradeTime", TimestampType, false),
+      StructField("symbol", StringType, false),
+      StructField("price", StringType, false),
+      StructField("quantity", StringType, false),
+      StructField("isBuyerMaker", BooleanType, false),
+      StructField("maker", BooleanType, false),
+      StructField("tradeId", IntegerType, false)
+    )
+  )
+
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession
@@ -36,8 +48,8 @@ object Main {
     // Kafka configuration
     val kafkaParams = Map(
       "kafka.bootstrap.servers" -> "kafka:29092",
-      "subscribe" -> "orderbook_btcusdt,orderbook_ethusdt",
-      "startingOffsets" -> "latest"
+      "subscribe" -> "trades_bnbusdt,trades_btcusdt,trades_ethusdt",
+      "startingOffsets" -> "earliest"
     )
 
     val kafkaStream = spark.readStream
@@ -48,20 +60,29 @@ object Main {
     // Parse Kafka JSON payload
     val parsedStream = kafkaStream
       .selectExpr("CAST(value AS STRING)")
-      .select(from_json(col("value"), schema).as("data"))
+      .select(from_json(col("value"), tradeSchema).as("data"))
       .select("data.*")
 
     // Calculate metrics
-    val bidAskSpread = computeBidAskSpread(parsedStream)
-    val marketDepth = computeMarketDepth(parsedStream)
-    val orderBookImbalance = computeOrderBookImbalance(parsedStream)
-    val marketTrends = computeMarketTrends(parsedStream)
+    // val bidAskSpread = computeBidAskSpread(parsedStream)
+    // val marketDepth = computeMarketDepth(parsedStream)
+    // val orderBookImbalance = computeOrderBookImbalance(parsedStream)
+    // val marketTrends = computeMarketTrends(parsedStream)
 
+    val tradeVolume = computeTradeVolume(parsedStream)
+    val priceTrends = computePriceTrends(parsedStream)
+    val volatility = computeVolatility(parsedStream)
+    val vwap = computeVWAP(parsedStream)
     // Combine all metrics
-    val allMetrics = bidAskSpread
-      .union(marketDepth)
-      .union(orderBookImbalance)
-      .union(marketTrends)
+    // val allMetrics = bidAskSpread
+    //  .union(marketDepth)
+    //  .union(orderBookImbalance)
+    //  .union(marketTrends)
+
+    val allMetrics = tradeVolume
+      .union(priceTrends)
+      .union(volatility)
+      .union(vwap)
 
     // Write results to MongoDB
     allMetrics.writeStream
@@ -69,8 +90,8 @@ object Main {
       .outputMode("append")
       .option("checkpointLocation", "/tmp/checkpoints")
       .trigger(Trigger.ProcessingTime("10 seconds"))
-      .option("database", "wholeInvertedIndex")
-      .option("collection", "words")
+      .option("database", "crypto_analysis")
+      .option("collection", "entities")
       .start()
 
     spark.streams.awaitAnyTermination()
@@ -135,7 +156,7 @@ object Main {
       orderBookDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
     val windowSpec =
-      Window.partitionBy("symbol").orderBy("timestamp").rowsBetween(-5, 0)
+      Window.partitionBy("symbol").orderBy("tradeTime").rowsBetween(-5, 0)
     orderBookDF
       .withColumn("bid_price", expr("cast(bids[0][0] as double)"))
       .withColumn("ask_price", expr("cast(asks[0][0] as double)"))
@@ -144,7 +165,7 @@ object Main {
         "rolling_avg_spread",
         avg(col("bid_ask_spread")).over(windowSpec)
       )
-      .select("symbol", "timestamp", "rolling_avg_spread")
+      .select("symbol", "tradeTime", "rolling_avg_spread")
       .withColumn("metric", lit("market_trends"))
   }
 
@@ -153,8 +174,8 @@ object Main {
       tradesDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
-      .withWatermark("timestamp", "5 minutes")
-      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
+      .withWatermark("tradeTime", "5 minutes")
+      .groupBy(window(col("tradeTime"), "1 minute"), col("symbol"))
       .agg(
         count("*").as("trade_count"),
         sum("quantity").as("total_trade_volume"),
@@ -175,23 +196,23 @@ object Main {
   def computePriceTrends(
       tradesDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
-    val windowSpec =
-      Window.partitionBy("symbol").orderBy("timestamp").rowsBetween(-5, 0)
+    val windowSpec = Window.partitionBy("symbol").orderBy("tradeTime")
 
     tradesDF
-      .withColumn("rolling_avg_price", avg("price").over(windowSpec))
+      .withColumn("prev_price", lag("price", 1).over(windowSpec))
+      .withColumn("price_change", col("price") - col("prev_price"))
       .withColumn(
-        "price_momentum",
-        col("price").cast("double") - lag(col("price").cast("double"), 1)
-          .over(windowSpec)
+        "price_change_percent",
+        (col("price_change") / col("prev_price")) * 100
       )
       .select(
-        "symbol",
-        "timestamp",
-        "rolling_avg_price",
-        "price_momentum"
+        col("symbol"),
+        col("tradeTime"),
+        col("price"),
+        col("prev_price"),
+        col("price_change"),
+        col("price_change_percent")
       )
-      .withColumn("metric", lit("price_trends"))
   }
 
   // Volatility Analysis
@@ -199,8 +220,8 @@ object Main {
       tradesDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
-      .withWatermark("timestamp", "5 minutes")
-      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
+      .withWatermark("tradeTime", "5 minutes")
+      .groupBy(window(col("tradeTime"), "1 minute"), col("symbol"))
       .agg(
         stddev("price").as("price_volatility"),
         (max("price") - min("price")).as("price_range")
@@ -220,8 +241,8 @@ object Main {
       tradesDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
     tradesDF
-      .withWatermark("timestamp", "5 minutes")
-      .groupBy(window(col("timestamp"), "1 minute"), col("symbol"))
+      .withWatermark("tradeTime", "5 minutes")
+      .groupBy(window(col("tradeTime"), "1 minute"), col("symbol"))
       .agg(
         sum(col("price") * col("quantity").cast("double")).as("price_volume"),
         sum("quantity").as("total_volume")
