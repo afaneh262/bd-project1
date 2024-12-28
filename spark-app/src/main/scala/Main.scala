@@ -79,19 +79,44 @@ object Main {
     //  .union(orderBookImbalance)
     //  .union(marketTrends)
 
-    val allMetrics = tradeVolume
-      .union(priceTrends)
-      .union(volatility)
-      .union(vwap)
-
-    // Write results to MongoDB
-    allMetrics.writeStream
+// Write tradeVolume to MongoDB
+    tradeVolume.writeStream
       .format("mongo")
       .outputMode("append")
-      .option("checkpointLocation", "/tmp/checkpoints")
+      .option("checkpointLocation", "/tmp/checkpoints/tradeVolume")
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .option("database", "crypto_analysis")
-      .option("collection", "entities")
+      .option("collection", "trade_volume")
+      .start()
+
+// Write priceTrends to MongoDB
+    priceTrends.writeStream
+      .format("mongo")
+      .outputMode("append")
+      .option("checkpointLocation", "/tmp/checkpoints/priceTrends")
+      .trigger(Trigger.ProcessingTime("10 seconds"))
+      .option("database", "crypto_analysis")
+      .option("collection", "price_trends")
+      .start()
+
+// Write volatility to MongoDB
+    volatility.writeStream
+      .format("mongo")
+      .outputMode("append")
+      .option("checkpointLocation", "/tmp/checkpoints/volatility")
+      .trigger(Trigger.ProcessingTime("10 seconds"))
+      .option("database", "crypto_analysis")
+      .option("collection", "volatility")
+      .start()
+
+// Write vwap to MongoDB
+    vwap.writeStream
+      .format("mongo")
+      .outputMode("append")
+      .option("checkpointLocation", "/tmp/checkpoints/vwap")
+      .trigger(Trigger.ProcessingTime("10 seconds"))
+      .option("database", "crypto_analysis")
+      .option("collection", "vwap")
       .start()
 
     spark.streams.awaitAnyTermination()
