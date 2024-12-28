@@ -30,7 +30,7 @@ This project provides a cryptocurrency prediction dashboard that collects, proce
 
     - **Kafka UI**: [http://localhost:8090](http://localhost:8090)
     - **Mongo Express**: [http://localhost:8081](http://localhost:8081)
-    - **Visualization Dashboard**: [http://localhost:3000](http://localhost:3000)
+    - **Visualization Dashboard**: [http://localhost:3010](http://localhost:3010)
 
 ## Services
 

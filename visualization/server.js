@@ -1,71 +1,135 @@
+// server.js
 const express = require("express");
+const { MongoClient } = require("mongodb");
+const { Server } = require("ws");
 const http = require("http");
-const socketIo = require("socket.io");
-const mongoose = require("mongoose");
 const path = require("path");
-require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const wss = new Server({ server });
+const mongoUri = "mongodb://root:example@localhost:27017";
+const dbName = "crypto_analysis";
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://root:example@localhost:27017/crypto_dummy?authSource=admin";
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+// Serve static files from public directory
+app.use(express.static("public"));
+app.use("/js", express.static("js")); // For our JavaScript modules
 
-// Define prediction schema
-const predictionSchema = new mongoose.Schema({
-  symbol: String,
-  timestamp: Number,
-  weighted_mid_price: Number,
-  prediction: Number,
-});
+// MongoDB connection and change stream handling
+async function startMongoConnection() {
+  const client = await MongoClient.connect(mongoUri);
+  const db = client.db(dbName);
 
-const Prediction = mongoose.model("predictions", predictionSchema);
-
-// Serve static files
-app.use(express.static(path.join(__dirname, "public")));
-
-// REST API endpoints
-app.get("/api/predictions/:symbol", async (req, res) => {
-  try {
-    const { symbol } = req.params;
-    const predictions = await Prediction.find({ symbol })
-      .sort({ timestamp: -1 })
-      .limit(100);
-    res.json(predictions);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// WebSocket connection handling
-io.on("connection", (socket) => {
-  console.log("Client connected");
-
-  socket.on("subscribe", async (symbol) => {
-    // Set up change stream for real-time updates
-    const changeStream = Prediction.watch([
-      { $match: { "fullDocument.symbol": symbol } },
-    ]);
-
+  // Watch for changes in collections
+  const collections = ["trade_volume", "price_trends", "volatility", "vwap"];
+  collections.forEach((collection) => {
+    const changeStream = db.collection(collection).watch();
     changeStream.on("change", (change) => {
-      if (change.operationType === "insert") {
-        socket.emit("prediction", change.fullDocument);
-      }
-    });
-
-    socket.on("disconnect", () => {
-      changeStream.close();
-      console.log("Client disconnected");
+      wss.clients.forEach((client) => {
+        client.send(
+          JSON.stringify({
+            type: collection,
+            data: change.fullDocument,
+          })
+        );
+      });
     });
   });
-});
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+  return db;
+}
+
+// API Routes
+async function setupRoutes(db) {
+  app.get("/api/symbols", async (req, res) => {
+    const symbols = await db.collection("trade_volume").distinct("symbol");
+    res.json(symbols);
+  });
+
+  app.get("/api/data/:symbol/:metric/:interval", async (req, res) => {
+    const { symbol, metric, interval } = req.params;
+    const intervalMs = getIntervalInMs(interval);
+
+    const pipeline = [
+      { $match: { symbol: symbol } },
+      {
+        $group: {
+          _id: {
+            $toDate: {
+              $subtract: [
+                { $toDate: "$start_time" },
+                { $mod: [{ $toDate: "$start_time" }, intervalMs] },
+              ],
+            },
+          },
+          avgValue: { $avg: getMetricField(metric) },
+          maxValue: { $max: getMetricField(metric) },
+          minValue: { $min: getMetricField(metric) },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $limit: 100 },
+    ];
+
+    const data = await db
+      .collection(getCollectionName(metric))
+      .aggregate(pipeline)
+      .toArray();
+
+    res.json(data);
+  });
+
+  // Serve index.html for all other routes
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  });
+}
+
+// Helper functions
+function getIntervalInMs(interval) {
+  const intervals = {
+    "1m": 60 * 1000,
+    "5m": 5 * 60 * 1000,
+    "30m": 30 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+  };
+  return intervals[interval] || intervals["1m"];
+}
+
+function getMetricField(metric) {
+  const metricFields = {
+    volume: "$total_trade_volume",
+    price: "$rolling_avg_price",
+    volatility: "$price_volatility",
+    vwap: "$vwap",
+  };
+  return metricFields[metric] || metricFields["volume"];
+}
+
+function getCollectionName(metric) {
+  const collections = {
+    volume: "trade_volume",
+    price: "price_trends",
+    volatility: "volatility",
+    vwap: "vwap",
+  };
+  return collections[metric] || collections["volume"];
+}
+
+// Start server
+async function startServer() {
+  try {
+    const db = await startMongoConnection();
+    await setupRoutes(db);
+
+    const PORT = process.env.PORT || 3010;
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();

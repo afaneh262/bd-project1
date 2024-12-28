@@ -4,9 +4,9 @@
     "description": "Cryptocurrency prediction visualization service",
     "main": "server.js",
     "dependencies": {
-      "express": "^4.18.2",
-      "socket.io": "^4.6.1",
-      "mongoose": "^7.0.3",
-      "dotenv": "^16.0.3"
+        "dotenv": "^16.0.3",
+        "express": "^4.21.2",
+        "mongodb": "^6.12.0",
+        "ws": "^8.18.0"
     }
-  }
+}
