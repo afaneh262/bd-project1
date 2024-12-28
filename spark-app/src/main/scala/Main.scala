@@ -5,6 +5,8 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 
 object Main {
+  val mongoUri = "mongodb://root:example@localhost:27017"
+
   // Define schema for the JSON payload
   val schema = StructType(
     Seq(
@@ -33,21 +35,15 @@ object Main {
       .builder()
       .appName("Task-1")
       .master("local[*]")
-      .config(
-        "spark.mongodb.read.connection.uri",
-        "mongodb://root:example@localhost:27017"
-      )
-      .config(
-        "spark.mongodb.write.connection.uri",
-        "mongodb://root:example@localhost:27017"
-      )
+      .config("spark.mongodb.read.connection.uri", mongoUri)
+      .config("spark.mongodb.write.connection.uri", mongoUri)
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("ERROR")
 
     // Kafka configuration
     val kafkaParams = Map(
-      "kafka.bootstrap.servers" -> "kafka:29092",
+      "kafka.bootstrap.servers" -> "localhost:9092",
       "subscribe" -> "trades_bnbusdt,trades_btcusdt,trades_ethusdt",
       "startingOffsets" -> "earliest"
     )
@@ -62,6 +58,8 @@ object Main {
       .selectExpr("CAST(value AS STRING)")
       .select(from_json(col("value"), tradeSchema).as("data"))
       .select("data.*")
+      .withColumn("price", col("price").cast(DoubleType))
+      .withColumn("quantity", col("quantity").cast(DoubleType))
 
     // Calculate metrics
     // val bidAskSpread = computeBidAskSpread(parsedStream)
@@ -79,44 +77,75 @@ object Main {
     //  .union(orderBookImbalance)
     //  .union(marketTrends)
 
-// Write tradeVolume to MongoDB
     tradeVolume.writeStream
-      .format("mongo")
-      .outputMode("append")
+      .foreachBatch {
+        (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
+          batchDF.write
+            .format("mongo")
+            .mode("append")
+            .option("uri", mongoUri)
+            .option("database", "crypto_analysis")
+            .option("collection", "trade_volume")
+            .save()
+          println("tradeVolume metrics written to MongoDB", batchId)
+      }
+      .outputMode("update")
       .option("checkpointLocation", "/tmp/checkpoints/tradeVolume")
       .trigger(Trigger.ProcessingTime("10 seconds"))
-      .option("database", "crypto_analysis")
-      .option("collection", "trade_volume")
       .start()
 
-// Write priceTrends to MongoDB
+    // Write priceTrends to MongoDB using foreachBatch
     priceTrends.writeStream
-      .format("mongo")
-      .outputMode("append")
+      .foreachBatch {
+        (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
+          batchDF.write
+            .format("mongo")
+            .mode("append")
+            .option("uri", mongoUri)
+            .option("database", "crypto_analysis")
+            .option("collection", "price_trends")
+            .save()
+          println("priceTrends metrics written to MongoDB", batchId)
+      }
+      .outputMode("update")
       .option("checkpointLocation", "/tmp/checkpoints/priceTrends")
       .trigger(Trigger.ProcessingTime("10 seconds"))
-      .option("database", "crypto_analysis")
-      .option("collection", "price_trends")
       .start()
 
-// Write volatility to MongoDB
+    // Write volatility to MongoDB using foreachBatch
     volatility.writeStream
-      .format("mongo")
-      .outputMode("append")
+      .foreachBatch {
+        (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
+          batchDF.write
+            .format("mongo")
+            .mode("append")
+            .option("uri", mongoUri)
+            .option("database", "crypto_analysis")
+            .option("collection", "volatility")
+            .save()
+          println("volatility metrics written to MongoDB", batchId)
+      }
+      .outputMode("update")
       .option("checkpointLocation", "/tmp/checkpoints/volatility")
       .trigger(Trigger.ProcessingTime("10 seconds"))
-      .option("database", "crypto_analysis")
-      .option("collection", "volatility")
       .start()
 
-// Write vwap to MongoDB
+    // Write vwap to MongoDB using foreachBatch
     vwap.writeStream
-      .format("mongo")
-      .outputMode("append")
+      .foreachBatch {
+        (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
+          batchDF.write
+            .format("mongo")
+            .mode("append")
+            .option("uri", mongoUri)
+            .option("database", "crypto_analysis")
+            .option("collection", "vwap")
+            .save()
+          println("VWAP metrics written to MongoDB", batchId)
+      }
+      .outputMode("update")
       .option("checkpointLocation", "/tmp/checkpoints/vwap")
       .trigger(Trigger.ProcessingTime("10 seconds"))
-      .option("database", "crypto_analysis")
-      .option("collection", "vwap")
       .start()
 
     spark.streams.awaitAnyTermination()
@@ -221,23 +250,25 @@ object Main {
   def computePriceTrends(
       tradesDF: org.apache.spark.sql.DataFrame
   ): org.apache.spark.sql.DataFrame = {
-    val windowSpec = Window.partitionBy("symbol").orderBy("tradeTime")
-
     tradesDF
-      .withColumn("prev_price", lag("price", 1).over(windowSpec))
-      .withColumn("price_change", col("price") - col("prev_price"))
-      .withColumn(
-        "price_change_percent",
-        (col("price_change") / col("prev_price")) * 100
+      .withWatermark("tradeTime", "5 minutes")
+      .groupBy(
+        window(col("tradeTime"), "1 minute"),
+        col("symbol")
+      )
+      .agg(
+        avg("price").cast(DoubleType).as("rolling_avg_price"),
+        (max("price").cast(DoubleType) - min("price").cast(DoubleType))
+          .as("price_momentum")
       )
       .select(
         col("symbol"),
-        col("tradeTime"),
-        col("price"),
-        col("prev_price"),
-        col("price_change"),
-        col("price_change_percent")
+        col("window.start").as("start_time"),
+        col("window.end").as("end_time"),
+        col("rolling_avg_price"),
+        col("price_momentum")
       )
+      .withColumn("metric", lit("price_trends"))
   }
 
   // Volatility Analysis
