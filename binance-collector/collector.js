@@ -20,19 +20,13 @@ async function setupKafkaTopics() {
   const admin = kafka.admin();
   await admin.connect();
 
-  const orderBookTopics = SYMBOLS.map((symbol) => ({
-    topic: `orderbook_${symbol.toLowerCase()}`,
-    numPartitions: 1,
-    replicationFactor: 1,
-  }));
-
   const tradesTopics = SYMBOLS.map((symbol) => ({
     topic: `trades_${symbol.toLowerCase()}`,
     numPartitions: 1,
     replicationFactor: 1,
   }));
 
-  const topics = [...orderBookTopics, ...tradesTopics];
+  const topics = [...tradesTopics];
 
   await admin.createTopics({ topics });
   await admin.disconnect();
@@ -43,34 +37,6 @@ async function startDataCollection() {
     // Connect to Kafka
     await producer.connect();
     console.log("Connected to Kafka");
-
-    // Set up depth websocket streams for each symbol
-    /*     SYMBOLS.forEach((symbol) => {
-      client.ws.depth(symbol, async (depth) => {
-        console.log('depth', depth);
-        const message = {
-          symbol,
-          timestamp: Date.now(),
-          bids: depth.bidDepth,
-          asks: depth.askDepth,
-        };
-
-        try {
-          await producer.send({
-            topic: `orderbook_${symbol.toLowerCase()}`,
-            messages: [
-              {
-                value: JSON.stringify(message),
-              },
-            ],
-          });
-        } catch (error) {
-          console.error(`Error sending message to Kafka for ${symbol}:`, error);
-        }
-      });
-
-      console.log(`Started collecting order book data for ${symbol}`);
-    }); */
 
     // Also collect price data
     //

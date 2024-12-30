@@ -1,213 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crypto Data Visualization</title>
-    
-    <!-- Add React and dependencies -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    
-    <!-- Add Babel for JSX -->
+
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Add Recharts -->
+
+    <!-- Recharts and dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: system-ui, -apple-system, sans-serif;
-        }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div id="root"></div>
 
     <!-- Our React components -->
-    <script type="text/babel" data-type="module">
-        // Destructure Recharts components
-        const {
-            LineChart, Line, XAxis, YAxis, CartesianGrid, 
-            Tooltip, Legend, ResponsiveContainer
-        } = Recharts;
+    <script type="text/babel">
+      const Recharts = window.Recharts;
+      console.log('window.Recharts', window.Recharts);
 
-        function App() {
-            const [symbols, setSymbols] = React.useState([]);
-            const [selectedSymbol, setSelectedSymbol] = React.useState('');
-            const [selectedInterval, setSelectedInterval] = React.useState('1m');
-            const [selectedMetric, setSelectedMetric] = React.useState('volume');
-            const [chartData, setChartData] = React.useState([]);
-            
-            // WebSocket connection
-            React.useEffect(() => {
-                const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
-                
-                ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    if (data.type === getCollectionName(selectedMetric)) {
-                        fetchData();
-                    }
-                };
-                
-                return () => ws.close();
-            }, [selectedMetric]);
-            
-            // Fetch available symbols
-            React.useEffect(() => {
-                fetch('/api/symbols')
-                    .then(res => res.json())
-                    .then(data => {
-                        setSymbols(data);
-                        if (data.length > 0) setSelectedSymbol(data[0]);
-                    });
-            }, []);
-            
-            // Fetch data when selection changes
-            React.useEffect(() => {
-                if (selectedSymbol) {
-                    fetchData();
-                }
-            }, [selectedSymbol, selectedInterval, selectedMetric]);
-            
-            const fetchData = async () => {
-                const response = await fetch(
-                    `/api/data/${selectedSymbol}/${selectedMetric}/${selectedInterval}`
-                );
-                const data = await response.json();
-                setChartData(data.map(item => ({
-                    timestamp: new Date(item._id).toLocaleString(),
-                    value: item.avgValue,
-                    max: item.maxValue,
-                    min: item.minValue
-                })));
-            };
+      function App() {
+        const [symbols, setSymbols] = React.useState([]);
+        const [selectedSymbol, setSelectedSymbol] = React.useState("");
+        const [selectedInterval, setSelectedInterval] = React.useState("1m");
+        const [selectedMetric, setSelectedMetric] = React.useState("volume");
+        const [chartData, setChartData] = React.useState([]);
+        const [lastUpdate, setLastUpdate] = React.useState(null);
 
-            const intervals = [
-                { value: '1m', label: '1 Minute' },
-                { value: '5m', label: '5 Minutes' },
-                { value: '30m', label: '30 Minutes' },
-                { value: '1h', label: '1 Hour' }
-            ];
-            
-            const metrics = [
-                { value: 'volume', label: 'Trade Volume' },
-                { value: 'price', label: 'Price' },
-                { value: 'volatility', label: 'Volatility' },
-                { value: 'vwap', label: 'VWAP' }
-            ];
+        // Polling for updates
+        React.useEffect(() => {
+          let pollInterval;
 
-            return (
-                <div className="p-6 max-w-7xl mx-auto">
-                    <div className="mb-6 flex gap-4">
-                        <select 
-                            value={selectedSymbol}
-                            onChange={(e) => setSelectedSymbol(e.target.value)}
-                            className="px-4 py-2 border rounded-lg"
-                        >
-                            {symbols.map(symbol => (
-                                <option key={symbol} value={symbol}>{symbol}</option>
-                            ))}
-                        </select>
-                        
-                        <select
-                            value={selectedInterval}
-                            onChange={(e) => setSelectedInterval(e.target.value)}
-                            className="px-4 py-2 border rounded-lg"
-                        >
-                            {intervals.map(interval => (
-                                <option key={interval.value} value={interval.value}>
-                                    {interval.label}
-                                </option>
-                            ))}
-                        </select>
-                        
-                        <select
-                            value={selectedMetric}
-                            onChange={(e) => setSelectedMetric(e.target.value)}
-                            className="px-4 py-2 border rounded-lg"
-                        >
-                            {metrics.map(metric => (
-                                <option key={metric.value} value={metric.value}>
-                                    {metric.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    
-                    <div className="p-6 bg-white rounded-lg shadow-lg">
-                        <h2 className="text-xl font-semibold mb-4">
-                            {selectedSymbol} - {getMetricLabel(selectedMetric)} ({selectedInterval})
-                        </h2>
-                        <div className="h-96">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis 
-                                        dataKey="timestamp"
-                                        tick={{ fontSize: 12 }}
-                                        angle={-45}
-                                        textAnchor="end"
-                                    />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="value" 
-                                        stroke="#8884d8" 
-                                        name={getMetricLabel(selectedMetric)}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="max" 
-                                        stroke="#82ca9d" 
-                                        name="Max"
-                                        dot={false}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="min" 
-                                        stroke="#ff7300" 
-                                        name="Min"
-                                        dot={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
+          const checkForUpdates = async () => {
+            try {
+              const response = await fetch(`/api/latest/${selectedMetric}`);
+              const { timestamp } = await response.json();
+
+              if (
+                timestamp &&
+                (!lastUpdate || new Date(timestamp) > new Date(lastUpdate))
+              ) {
+                setLastUpdate(timestamp);
+                fetchData();
+              }
+            } catch (error) {
+              console.error("Error checking for updates:", error);
+            }
+          };
+
+          // Poll every 5 seconds
+          pollInterval = setInterval(checkForUpdates, 5000);
+
+          return () => clearInterval(pollInterval);
+        }, [selectedMetric, lastUpdate]);
+
+        // Fetch available symbols
+        React.useEffect(() => {
+          fetch("/api/symbols")
+            .then((res) => res.json())
+            .then((data) => {
+              setSymbols(data);
+              if (data.length > 0) {
+                setSelectedSymbol(data[0]);
+              }
+            })
+            .catch((error) => console.error("Error fetching symbols:", error));
+        }, []);
+
+        // Fetch data when selection changes
+        React.useEffect(() => {
+          if (selectedSymbol) {
+            fetchData();
+          }
+        }, [selectedSymbol, selectedInterval, selectedMetric]);
+
+        const fetchData = async () => {
+          try {
+            const response = await fetch(
+              `/api/data/${selectedSymbol}/${selectedMetric}/${selectedInterval}`
             );
-        }
+            const data = await response.json();
+            setChartData(
+              data.map((item) => ({
+                timestamp: new Date(item._id).toLocaleString(),
+                value: item.avgValue,
+                max: item.maxValue,
+                min: item.minValue,
+              }))
+            );
+          } catch (error) {
+            console.error("Error fetching data:", error);
+          }
+        };
 
-        // Helper functions
-        function getMetricLabel(metric) {
-            const labels = {
-                'volume': 'Trade Volume',
-                'price': 'Price',
-                'volatility': 'Volatility',
-                'vwap': 'VWAP'
-            };
-            return labels[metric] || labels['volume'];
-        }
+        const intervals = [
+          { value: "1m", label: "1 Minute" },
+          { value: "5m", label: "5 Minutes" },
+          { value: "30m", label: "30 Minutes" },
+          { value: "1h", label: "1 Hour" },
+        ];
 
-        function getCollectionName(metric) {
-            const collections = {
-                'volume': 'trade_volume',
-                'price': 'price_trends',
-                'volatility': 'volatility',
-                'vwap': 'vwap'
-            };
-            return collections[metric] || collections['volume'];
-        }
+        const metrics = [
+          { value: "volume", label: "Trade Volume" },
+          { value: "price", label: "Price" },
+          { value: "volatility", label: "Volatility" },
+          { value: "vwap", label: "VWAP" },
+        ];
 
-        // Render the app
-        ReactDOM.render(<App />, document.getElementById('root'));
+        return (
+          <div className="p-6 max-w-7xl mx-auto">
+            <div className="mb-6 flex flex-wrap gap-4">
+              <select
+                value={selectedSymbol}
+                onChange={(e) => setSelectedSymbol(e.target.value)}
+                className="px-4 py-2 border rounded-lg"
+              >
+                {symbols.map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedInterval}
+                onChange={(e) => setSelectedInterval(e.target.value)}
+                className="px-4 py-2 border rounded-lg"
+              >
+                {intervals.map((interval) => (
+                  <option key={interval.value} value={interval.value}>
+                    {interval.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedMetric}
+                onChange={(e) => setSelectedMetric(e.target.value)}
+                className="px-4 py-2 border rounded-lg"
+              >
+                {metrics.map((metric) => (
+                  <option key={metric.value} value={metric.value}>
+                    {metric.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-6 bg-white rounded-lg shadow-lg">
+              <h2 className="text-xl font-semibold mb-4">
+                {selectedSymbol} - {getMetricLabel(selectedMetric)} (
+                {selectedInterval})
+              </h2>
+              <div className="h-96">
+                {chartData.length > 0 && (
+                  <Recharts.ResponsiveContainer width="100%" height="100%">
+                    <Recharts.LineChart data={chartData}>
+                      <Recharts.CartesianGrid strokeDasharray="3 3" />
+                      <Recharts.XAxis
+                        dataKey="timestamp"
+                        tick={{ fontSize: 12 }}
+                        angle={-45}
+                        textAnchor="end"
+                      />
+                      <Recharts.YAxis />
+                      <Recharts.Tooltip />
+                      <Recharts.Legend />
+                      <Recharts.Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#8884d8"
+                        name={getMetricLabel(selectedMetric)}
+                      />
+                      <Recharts.Line
+                        type="monotone"
+                        dataKey="max"
+                        stroke="#82ca9d"
+                        name="Max"
+                        dot={false}
+                      />
+                      <Recharts.Line
+                        type="monotone"
+                        dataKey="min"
+                        stroke="#ff7300"
+                        name="Min"
+                        dot={false}
+                      />
+                    </Recharts.LineChart>
+                  </Recharts.ResponsiveContainer>
+                )}
+              </div>
+              <div className="mt-4 text-sm text-gray-500">
+                Last updated:{" "}
+                {lastUpdate ? new Date(lastUpdate).toLocaleString() : "Never"}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Helper functions
+      function getMetricLabel(metric) {
+        const labels = {
+          volume: "Trade Volume",
+          price: "Price",
+          volatility: "Volatility",
+          vwap: "VWAP",
+        };
+        return labels[metric] || labels["volume"];
+      }
+
+      // Render the app
+      ReactDOM.render(<App />, document.getElementById("root"));
     </script>
-</body>
+  </body>
 </html>

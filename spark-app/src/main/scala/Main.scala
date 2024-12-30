@@ -1,6 +1,5 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 
@@ -8,15 +7,6 @@ object Main {
   val mongoUri = "mongodb://root:example@localhost:27017"
 
   // Define schema for the JSON payload
-  val schema = StructType(
-    Seq(
-      StructField("symbol", StringType, false),
-      StructField("timestamp", TimestampType, false),
-      StructField("bids", ArrayType(ArrayType(StringType)), false),
-      StructField("asks", ArrayType(ArrayType(StringType)), false)
-    )
-  )
-
   val tradeSchema = StructType(
     Seq(
       StructField("tradeTime", TimestampType, false),
@@ -61,21 +51,10 @@ object Main {
       .withColumn("price", col("price").cast(DoubleType))
       .withColumn("quantity", col("quantity").cast(DoubleType))
 
-    // Calculate metrics
-    // val bidAskSpread = computeBidAskSpread(parsedStream)
-    // val marketDepth = computeMarketDepth(parsedStream)
-    // val orderBookImbalance = computeOrderBookImbalance(parsedStream)
-    // val marketTrends = computeMarketTrends(parsedStream)
-
     val tradeVolume = computeTradeVolume(parsedStream)
     val priceTrends = computePriceTrends(parsedStream)
     val volatility = computeVolatility(parsedStream)
     val vwap = computeVWAP(parsedStream)
-    // Combine all metrics
-    // val allMetrics = bidAskSpread
-    //  .union(marketDepth)
-    //  .union(orderBookImbalance)
-    //  .union(marketTrends)
 
     tradeVolume.writeStream
       .foreachBatch {
@@ -149,78 +128,6 @@ object Main {
       .start()
 
     spark.streams.awaitAnyTermination()
-  }
-
-  def computeBidAskSpread(
-      orderBookDF: org.apache.spark.sql.DataFrame
-  ): org.apache.spark.sql.DataFrame = {
-    orderBookDF
-      .withColumn("bid_price", expr("cast(bids[0][0] as double)"))
-      .withColumn("ask_price", expr("cast(asks[0][0] as double)"))
-      .withColumn("bid_ask_spread", col("ask_price") - col("bid_price"))
-      .select(
-        "symbol",
-        "timestamp",
-        "bid_price",
-        "ask_price",
-        "bid_ask_spread"
-      )
-      .withColumn("metric", lit("bid_ask_spread"))
-  }
-
-  def computeMarketDepth(
-      orderBookDF: org.apache.spark.sql.DataFrame
-  ): org.apache.spark.sql.DataFrame = {
-    orderBookDF
-      .withColumn(
-        "total_bid_volume",
-        expr("aggregate(bids, 0D, (acc, x) -> acc + cast(x[1] as double))")
-      )
-      .withColumn(
-        "total_ask_volume",
-        expr("aggregate(asks, 0D, (acc, x) -> acc + cast(x[1] as double))")
-      )
-      .select("symbol", "timestamp", "total_bid_volume", "total_ask_volume")
-      .withColumn("metric", lit("market_depth"))
-  }
-
-  def computeOrderBookImbalance(
-      orderBookDF: org.apache.spark.sql.DataFrame
-  ): org.apache.spark.sql.DataFrame = {
-    orderBookDF
-      .withColumn(
-        "total_bid_volume",
-        expr("aggregate(bids, 0D, (acc, x) -> acc + cast(x[1] as double))")
-      )
-      .withColumn(
-        "total_ask_volume",
-        expr("aggregate(asks, 0D, (acc, x) -> acc + cast(x[1] as double))")
-      )
-      .withColumn(
-        "order_book_imbalance",
-        (col("total_bid_volume") - col("total_ask_volume")) / (col(
-          "total_bid_volume"
-        ) + col("total_ask_volume"))
-      )
-      .select("symbol", "timestamp", "order_book_imbalance")
-      .withColumn("metric", lit("order_book_imbalance"))
-  }
-
-  def computeMarketTrends(
-      orderBookDF: org.apache.spark.sql.DataFrame
-  ): org.apache.spark.sql.DataFrame = {
-    val windowSpec =
-      Window.partitionBy("symbol").orderBy("tradeTime").rowsBetween(-5, 0)
-    orderBookDF
-      .withColumn("bid_price", expr("cast(bids[0][0] as double)"))
-      .withColumn("ask_price", expr("cast(asks[0][0] as double)"))
-      .withColumn("bid_ask_spread", col("ask_price") - col("bid_price"))
-      .withColumn(
-        "rolling_avg_spread",
-        avg(col("bid_ask_spread")).over(windowSpec)
-      )
-      .select("symbol", "tradeTime", "rolling_avg_spread")
-      .withColumn("metric", lit("market_trends"))
   }
 
   // Trade Volume and Activity Metrics
