@@ -31,11 +31,50 @@ object Main {
 
     spark.sparkContext.setLogLevel("ERROR")
 
+    val allCoins = Seq(
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "ADAUSDT",
+      "XRPUSDT",
+      "DOGEUSDT",
+      "DOTUSDT",
+      "UNIUSDT",
+      "LINKUSDT",
+      "LTCUSDT",
+      "BCHUSDT",
+      "SOLUSDT",
+      "MATICUSDT",
+      "XLMUSDT",
+      "ETCUSDT",
+      "THETAUSDT",
+      "VETUSDT",
+      "TRXUSDT",
+      "EOSUSDT",
+      "FILUSDT",
+      "AAVEUSDT",
+      "XTZUSDT",
+      "ATOMUSDT",
+      "NEOUSDT",
+      "ALGOUSDT",
+      "KSMUSDT",
+      "MKRUSDT",
+      "COMPUSDT",
+      "CROUSDT",
+      "FTTUSDT",
+      "ICPUSDT",
+      "AVAXUSDT",
+      "BTTUSDT",
+      "CAKEUSDT"
+    )
+
+    val topics = allCoins.map(coin => s"trades_${coin.toLowerCase()}").mkString(",")
+    
     // Kafka configuration
     val kafkaParams = Map(
       "kafka.bootstrap.servers" -> "localhost:9092",
-      "subscribe" -> "trades_bnbusdt,trades_btcusdt,trades_ethusdt",
-      "startingOffsets" -> "earliest"
+      "subscribe" -> topics,
+      "startingOffsets" -> "latest"
     )
 
     val kafkaStream = spark.readStream
@@ -51,6 +90,7 @@ object Main {
       .withColumn("price", col("price").cast(DoubleType))
       .withColumn("quantity", col("quantity").cast(DoubleType))
 
+    println("reading from kafka")
     val tradeVolume = computeTradeVolume(parsedStream)
     val priceTrends = computePriceTrends(parsedStream)
     val volatility = computeVolatility(parsedStream)
@@ -144,8 +184,7 @@ object Main {
       )
       .select(
         col("symbol"),
-        col("window.start").as("start_time"),
-        col("window.end").as("end_time"),
+        col("window.start").cast("long").as("timestamp"),
         col("trade_count"),
         col("total_trade_volume"),
         col("avg_trade_size")
@@ -170,8 +209,7 @@ object Main {
       )
       .select(
         col("symbol"),
-        col("window.start").as("start_time"),
-        col("window.end").as("end_time"),
+        col("window.start").cast("long").as("timestamp"),
         col("rolling_avg_price"),
         col("price_momentum")
       )
@@ -191,8 +229,7 @@ object Main {
       )
       .select(
         col("symbol"),
-        col("window.start").as("start_time"),
-        col("window.end").as("end_time"),
+        col("window.start").cast("long").as("timestamp"),
         col("price_volatility"),
         col("price_range")
       )
@@ -213,8 +250,7 @@ object Main {
       .withColumn("vwap", expr("price_volume / total_volume"))
       .select(
         col("symbol"),
-        col("window.start").alias("start_time"),
-        col("window.end").as("end_time"),
+        col("window.start").cast("long").as("timestamp"),
         col("vwap")
       )
       .withColumn("metric", lit("vwap"))

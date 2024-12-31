@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Changes Table</title>
+
+    <!-- React dependencies -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Recharts and dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .sort-arrow::after {
+        content: "↑";
+        margin-left: 4px;
+      }
+      .sort-arrow.desc::after {
+        content: "↓";
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Our React components -->
+    <script type="text/babel">
+      function App() {
+        const [interval, setInterval] = React.useState("5m");
+        const [data, setData] = React.useState([]);
+        const [sortConfig, setSortConfig] = React.useState({
+          key: "priceChange",
+          direction: "desc",
+        });
+
+        // Fetch data and set up polling
+        React.useEffect(() => {
+          const fetchData = async () => {
+            try {
+              console.log('interval', interval);
+              const response = await fetch(`/api/changes/${interval}`);
+              const changes = await response.json();
+              setData(changes);
+            } catch (error) {
+              console.error("Error fetching changes:", error);
+            }
+          };
+
+          fetchData();
+        }, [interval]);
+
+        // Sort function
+        const sortData = (key) => {
+          let direction = "desc";
+          if (sortConfig.key === key && sortConfig.direction === "desc") {
+            direction = "asc";
+          }
+
+          setSortConfig({ key, direction });
+
+          const sortedData = [...data].sort((a, b) => {
+            if (direction === "asc") {
+              return a[key] - b[key];
+            }
+            return b[key] - a[key];
+          });
+
+          setData(sortedData);
+        };
+
+        // Format percentage
+        const formatPercentage = (value) => {
+          return value ? `${value.toFixed(2)}%` : "N/A";
+        };
+
+        // Get sort arrow class
+        const getSortArrowClass = (key) => {
+          if (sortConfig.key === key) {
+            return `sort-arrow ${
+              sortConfig.direction === "desc" ? "desc" : ""
+            }`;
+          }
+          return "";
+        };
+
+        const intervals = [
+          { value: "5m", label: "5 Minutes" },
+          { value: "15m", label: "15 Minutes" },
+          { value: "30m", label: "30 Minutes" },
+          { value: "1h", label: "1 Hour" },
+        ];
+
+        return (
+          <div className="p-6 max-w-7xl mx-auto">
+            <div className="mb-6">
+              <label className="mr-2">Time Interval:</label>
+              <select
+                value={interval}
+                onChange={(e) => setInterval(e.target.value)}
+                className="px-4 py-2 border rounded-lg"
+              >
+                {intervals.map((int) => (
+                  <option key={int.value} value={int.value}>
+                    {int.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Symbol
+                    </th>
+                    <th
+                      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer ${getSortArrowClass(
+                        "priceChange"
+                      )}`}
+                      onClick={() => sortData("priceChange")}
+                    >
+                      Price Change
+                    </th>
+                    <th
+                      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer ${getSortArrowClass(
+                        "volumeChange"
+                      )}`}
+                      onClick={() => sortData("volumeChange")}
+                    >
+                      Volume Change
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {data.map((row) => (
+                    <tr key={row.symbol}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {row.symbol}
+                      </td>
+                      <td
+                        className={`px-6 py-4 whitespace-nowrap ${
+                          row.priceChange >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {formatPercentage(row.priceChange)}
+                      </td>
+                      <td
+                        className={`px-6 py-4 whitespace-nowrap ${
+                          row.volumeChange >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {formatPercentage(row.volumeChange)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+
+      // Render the app
+      ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+  </body>
+</html>

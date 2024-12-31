@@ -14,7 +14,42 @@ const producer = kafka.producer();
 const client = Binance();
 
 // Symbols to track
-const SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT"];
+const SYMBOLS = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "BNBUSDT",
+  "ADAUSDT",
+  "XRPUSDT",
+  "DOGEUSDT",
+  "DOTUSDT",
+  "UNIUSDT",
+  "LINKUSDT",
+  "LTCUSDT",
+  "BCHUSDT",
+  "SOLUSDT",
+  "MATICUSDT",
+  "XLMUSDT",
+  "ETCUSDT",
+  "THETAUSDT",
+  "VETUSDT",
+  "TRXUSDT",
+  "EOSUSDT",
+  "FILUSDT",
+  "AAVEUSDT",
+  "XTZUSDT",
+  "ATOMUSDT",
+  "NEOUSDT",
+  "ALGOUSDT",
+  "KSMUSDT",
+  "MKRUSDT",
+  "COMPUSDT",
+  "CROUSDT",
+  "FTTUSDT",
+  "ICPUSDT",
+  "AVAXUSDT",
+  "BTTUSDT",
+  "CAKEUSDT"
+];
 
 async function setupKafkaTopics() {
   const admin = kafka.admin();
@@ -61,7 +96,9 @@ async function startDataCollection() {
               },
             ],
           });
-          console.log(`Sent trade data to Kafka for ${symbol}, tradeId: ${trade.tradeId}`);
+          console.log(
+            `Sent trade data to Kafka for ${symbol}, tradeId: ${trade.tradeId}`
+          );
         } catch (error) {
           console.error(
             `Error sending trade data to Kafka for ${symbol}:`,
