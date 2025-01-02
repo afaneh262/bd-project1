@@ -29,7 +29,6 @@ async function connectToMongo() {
 
 // API Routes
 async function setupRoutes() {
-  // Get available symbols
   app.get("/api/symbols", async (req, res) => {
     try {
       const symbols = await db.collection("trade_volume").distinct("symbol");
@@ -39,7 +38,6 @@ async function setupRoutes() {
     }
   });
 
-  // Get latest data for a specific interval
   app.get("/api/data/:symbol/:metric/:interval", async (req, res) => {
     try {
       const { symbol, metric, interval } = req.params;
@@ -57,7 +55,7 @@ async function setupRoutes() {
             minValue: { $min: getMetricField(metric) },
           },
         },
-        { $sort: { _id: -1 } }, // Sort by newest first
+        { $sort: { _id: -1 } },
         { $limit: 100 },
       ];
 
@@ -68,12 +66,10 @@ async function setupRoutes() {
 
       res.json(data.reverse());
     } catch (error) {
-      console.log("error", error);
       res.status(500).json({ error: "Failed to fetch data" });
     }
   });
 
-  // Get latest timestamp for a metric
   app.get("/api/latest/:metric", async (req, res) => {
     try {
       const { metric } = req.params;
@@ -95,7 +91,6 @@ async function setupRoutes() {
       const { interval } = req.params;
       const intervalMs = getIntervalInMs(interval);
 
-      // Get current time rounded down to the nearest minute
       const now = new Date().getTime();
 
       const timePeriod = {
@@ -106,8 +101,6 @@ async function setupRoutes() {
           },
         },
       };
-
-      console.log('timePeriod', timePeriod);
 
       // Pipeline for price changes
       const pricePipeline = [
@@ -152,8 +145,6 @@ async function setupRoutes() {
         db.collection("price_trends").aggregate(pricePipeline).toArray(),
         db.collection("trade_volume").aggregate(volumePipeline).toArray(),
       ]);
-
-      console.log('priceData, volumeData', priceData, volumeData);
 
       const volumeMap = new Map(volumeData.map((item) => [item._id, item]));
 

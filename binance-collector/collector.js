@@ -73,8 +73,7 @@ async function startDataCollection() {
     await producer.connect();
     console.log("Connected to Kafka");
 
-    // Also collect price data
-    //
+    // Collec trade data
     SYMBOLS.forEach((symbol) => {
       client.ws.trades(symbol, async (trade) => {
         const message = {

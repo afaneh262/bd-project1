@@ -2,6 +2,39 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
+import org.apache.spark.util.sketch.BloomFilter
+import java.io._
+
+import org.apache.spark.util.sketch.BloomFilter
+
+object BloomFilterManager extends Serializable {
+  @transient private var bloomFilter: BloomFilter = null
+
+  def getInstance: BloomFilter = {
+    if (bloomFilter == null) {
+      synchronized {
+        if (bloomFilter == null) {
+          bloomFilter = BloomFilter.create(1000000, 0.01)
+        }
+      }
+    }
+    bloomFilter
+  }
+
+  def checkAndAdd(tradeId: Int): Boolean = {
+    val filter = getInstance
+    synchronized {
+      if (!filter.mightContain(tradeId)) {
+        println("Adding tradeId to BloomFilter: " + tradeId)
+        filter.put(tradeId)
+        true
+      } else {
+        println("TradeId already exists in BloomFilter: " + tradeId)
+        false
+      }
+    }
+  }
+}
 
 object Main {
   val mongoUri = "mongodb://root:example@localhost:27017"
@@ -30,6 +63,9 @@ object Main {
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("ERROR")
+
+    val checkTradeIdUDF =
+      udf((tradeId: Int) => BloomFilterManager.checkAndAdd(tradeId))
 
     val allCoins = Seq(
       "BTCUSDT",
@@ -68,8 +104,9 @@ object Main {
       "CAKEUSDT"
     )
 
-    val topics = allCoins.map(coin => s"trades_${coin.toLowerCase()}").mkString(",")
-    
+    val topics =
+      allCoins.map(coin => s"trades_${coin.toLowerCase()}").mkString(",")
+
     // Kafka configuration
     val kafkaParams = Map(
       "kafka.bootstrap.servers" -> "localhost:9092",
@@ -90,11 +127,14 @@ object Main {
       .withColumn("price", col("price").cast(DoubleType))
       .withColumn("quantity", col("quantity").cast(DoubleType))
 
+    val filteredStream = parsedStream
+      .filter(checkTradeIdUDF(col("tradeId")))
+
     println("reading from kafka")
-    val tradeVolume = computeTradeVolume(parsedStream)
-    val priceTrends = computePriceTrends(parsedStream)
-    val volatility = computeVolatility(parsedStream)
-    val vwap = computeVWAP(parsedStream)
+    val tradeVolume = computeTradeVolume(filteredStream)
+    val priceTrends = computePriceTrends(filteredStream)
+    val volatility = computeVolatility(filteredStream)
+    val vwap = computeVWAP(filteredStream)
 
     tradeVolume.writeStream
       .foreachBatch {
