@@ -136,6 +136,7 @@ object Main {
     val volatility = computeVolatility(filteredStream)
     val vwap = computeVWAP(filteredStream)
 
+    // Write trade volume to MongoDB
     tradeVolume.writeStream
       .foreachBatch {
         (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
@@ -153,7 +154,7 @@ object Main {
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .start()
 
-    // Write priceTrends to MongoDB using foreachBatch
+    // Write priceTrends to MongoDB
     priceTrends.writeStream
       .foreachBatch {
         (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
@@ -171,7 +172,7 @@ object Main {
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .start()
 
-    // Write volatility to MongoDB using foreachBatch
+    // Write volatility to MongoDB
     volatility.writeStream
       .foreachBatch {
         (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
@@ -189,7 +190,7 @@ object Main {
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .start()
 
-    // Write vwap to MongoDB using foreachBatch
+    // Write vwap to MongoDB
     vwap.writeStream
       .foreachBatch {
         (batchDF: org.apache.spark.sql.DataFrame, batchId: Long) =>
