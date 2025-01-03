@@ -4,9 +4,9 @@ This project provides a cryptocurrency prediction dashboard that collects, proce
 
 ## Project Structure
 
-- `binance-collector/`: Collects order book and trade data from Binance and sends it to Kafka.
+- `binance-collector/`: Collects trades data from Binance and sends it to Kafka.
 - `spark-app/`: Processes the data using Apache Spark and stores the results in MongoDB.
-- `visualization/`: Provides a web interface to visualize the predictions and real-time data.
+- `visualization/`: Provides a web interface to visualize the metrics.
 
 ## Prerequisites
 
@@ -17,8 +17,8 @@ This project provides a cryptocurrency prediction dashboard that collects, proce
 
 1. Clone the repository:
     ```sh
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone https://github.com/afaneh262/bd-project1
+    cd bd-project1
     ```
 
 2. Start the Docker containers:
@@ -44,11 +44,6 @@ This project provides a cryptocurrency prediction dashboard that collects, proce
 - **Spark Worker**: Spark cluster worker node.
 - **Binance Collector**: Collects data from Binance and sends it to Kafka.
 - **Spark App**: Processes data from Kafka and stores results in MongoDB.
-
-## Environment Variables
-
-- [KAFKA_BOOTSTRAP_SERVERS](http://_vscodecontentref_/1): Kafka bootstrap servers (default: `localhost:9092`)
-- [MONGODB_URI](http://_vscodecontentref_/2): MongoDB connection URI (default: [mongodb://root:example@localhost:27017/crypto](http://_vscodecontentref_/3))
 
 ## License
 
