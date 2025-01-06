@@ -74,20 +74,6 @@ services:
     depends_on:
       - mongodb
 
-  # Visualization Service (Streamlit)
-  visualization:
-    build:
-      context: ./visualization
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - mongodb
-    environment:
-      - MONGODB_URI=mongodb://mongodb:27017/crypto
-    networks:
-      - crypto_net
-
   # Spark Master
   spark-master:
     image: bitnami/spark:latest
@@ -117,34 +103,6 @@ services:
       - SPARK_SSL_ENABLED=no
     depends_on:
       - spark-master
-    networks:
-      - crypto_net
-
-  # Data Collection Service
-  binance-collector:
-    build:
-      context: ./binance-collector
-      dockerfile: Dockerfile
-    depends_on:
-      - kafka
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-    networks:
-      - crypto_net
-
-  # Spark Processing Application
-  spark-app:
-    build:
-      context: ./spark-app
-      dockerfile: Dockerfile
-    depends_on:
-      - spark-master
-      - kafka
-      - mongodb
-    environment:
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - MONGODB_URI=mongodb://mongodb:27017
     networks:
       - crypto_net
 

@@ -127,8 +127,7 @@ object Main {
       .withColumn("price", col("price").cast(DoubleType))
       .withColumn("quantity", col("quantity").cast(DoubleType))
 
-    val filteredStream = parsedStream
-      .filter(checkTradeIdUDF(col("tradeId")))
+    val filteredStream = parsedStream //.filter(checkTradeIdUDF(col("tradeId")))
 
     println("reading from kafka")
     val tradeVolume = computeTradeVolume(filteredStream)
@@ -241,7 +240,7 @@ object Main {
       .withWatermark("tradeTime", "5 minutes")
       .groupBy(
         window(col("tradeTime"), "1 minute"),
-        col("symbol")
+        col("symbol"),
       )
       .agg(
         avg("price").cast(DoubleType).as("rolling_avg_price"),

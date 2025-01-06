@@ -25,12 +25,30 @@ This project provides a cryptocurrency prediction dashboard that collects, proce
     ```sh
     docker-compose up --build
     ```
+    
+    This will will create the folllowing containers: Mongodb, Mongo-Express, Kafka, Kafka-UI, Spark workers and Master
+3. Start the binannce collector
+```
+cd binance-collector
+npm install #prefer node 18
+node collector.js
+```
 
-3. Open the following links in your browser:
+4. Start the visualization server
+```
+cd visualization
+npm install # prefer node 18
+node server.js
+```
+
+5. Run the spark-scala app Main object in `src/main/scala/Main.scala`
+
+6. Open the following links in your browser:
 
     - **Kafka UI**: [http://localhost:8090](http://localhost:8090)
     - **Mongo Express**: [http://localhost:8081](http://localhost:8081)
     - **Visualization Dashboard**: [http://localhost:3010](http://localhost:3010)
+    - **Visualization Dashboard Trends**: [http://localhost:3010/changes.html](http://localhost:3010/changes.html)
 
 ## Services
 
